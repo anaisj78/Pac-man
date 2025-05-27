@@ -2,19 +2,16 @@ import pygame
 import heapq
 import random
 
-# Initialize
 pygame.init()
 pygame.font.init()
 font = pygame.font.SysFont("Arial", 24)
 
-# Display settings
 TILE_SIZE = 40
 ROWS, COLS = 9, 15
 WIDTH, HEIGHT = COLS * TILE_SIZE, ROWS * TILE_SIZE
 SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Pac-Man with Dijkstra Ghosts")
 
-# Colors
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 WALL = (50, 50, 50)
@@ -35,13 +32,11 @@ maze = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 ]
 
-# Entities
 pacman_pos = [1, 1]
-ghost_positions = []  # Filled at runtime based on difficulty
+ghost_positions = [] 
 ghost_start_template = [[7, 13], [1, 13], [7, 1]]
 score = 0
 
-# Timers
 clock = pygame.time.Clock()
 start_time = pygame.time.get_ticks()
 last_move_time = 0
@@ -49,7 +44,56 @@ move_delay = 120
 last_ghost_time = 0
 ghost_delay = 600
 
-# Draw game elements
+AI_ALGO = None
+
+class DisjointSet:
+    def __init__(self):
+        self.parent = {}
+    def find(self, x):
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
+    def union(self, x, y):
+        xr, yr = self.find(x), self.find(y)
+        if xr != yr:
+            self.parent[yr] = xr
+
+def kruskal_mst():
+    edges = []
+    for r in range(ROWS):
+        for c in range(COLS):
+            if maze[r][c] in [0,2]:
+                for dr, dc in [(1,0),(0,1)]:
+                    nr, nc = r+dr, c+dc
+                    if 0 <= nr < ROWS and 0 <= nc < COLS and maze[nr][nc] in [0,2]:
+                        edges.append(((r,c),(nr,nc)))
+    ds = DisjointSet()
+    for r in range(ROWS):
+        for c in range(COLS):
+            if maze[r][c] in [0,2]:
+                ds.parent[(r,c)] = (r,c)
+    mst = {k:[] for k in ds.parent}
+    for u,v in sorted(edges):
+        if ds.find(u) != ds.find(v):
+            ds.union(u,v)
+            mst[u].append(v)
+            mst[v].append(u)
+    return mst
+
+def kruskal_path(start, goal, mst):
+    from collections import deque
+    queue = deque([(start, [start])])
+    visited = set([start])
+    while queue:
+        node, path = queue.popleft()
+        if node == goal:
+            return path[1:]  # skip start
+        for neighbor in mst.get(node, []):
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append((neighbor, path + [neighbor]))
+    return []
+
 def draw_grid():
     for r in range(ROWS):
         for c in range(COLS):
@@ -72,7 +116,6 @@ def draw_score():
     text = font.render(f"Score: {score}", True, WHITE)
     SCREEN.blit(text, (10, 10))
 
-# Ghost pathfinding
 def get_neighbors(pos):
     r, c = pos
     for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:
@@ -100,15 +143,21 @@ def dijkstra(start, goal):
     return path
 
 def move_ghosts():
-    for i in range(len(ghost_positions)):
-        path = dijkstra(tuple(ghost_positions[i]), tuple(pacman_pos))
-        if path:
-            ghost_positions[i][0], ghost_positions[i][1] = path[0]
+    if AI_ALGO == 'dijkstra':
+        for i in range(len(ghost_positions)):
+            path = dijkstra(tuple(ghost_positions[i]), tuple(pacman_pos))
+            if path:
+                ghost_positions[i][0], ghost_positions[i][1] = path[0]
+    elif AI_ALGO == 'kruskal':
+        mst = kruskal_mst()
+        for i in range(len(ghost_positions)):
+            path = kruskal_path(tuple(ghost_positions[i]), tuple(pacman_pos), mst)
+            if path:
+                ghost_positions[i][0], ghost_positions[i][1] = path[0]
 
 def check_collision():
     return any(pacman_pos == ghost for ghost in ghost_positions)
 
-# Controls
 def handle_pacman_move():
     keys = pygame.key.get_pressed()
     r, c = pacman_pos
@@ -124,7 +173,6 @@ def handle_pacman_move():
 def check_victory():
     return not any(0 in row for row in maze)
 
-# Difficulty menu
 def difficulty_menu():
     SCREEN.fill(BLACK)
     title = font.render("Choose Difficulty", True, WHITE)
@@ -152,7 +200,27 @@ def difficulty_menu():
                 elif 320 <= y <= 350:
                     return 3
 
-# Main game loop
+def ai_menu():
+    SCREEN.fill(BLACK)
+    title = font.render("Choose Ghost AI", True, WHITE)
+    dij_btn = font.render("Dijkstra (Shortest Path)", True, (0, 200, 255))
+    kru_btn = font.render("Kruskal (MST Path)", True, (200, 0, 255))
+    SCREEN.blit(title, (WIDTH // 2 - title.get_width() // 2, 100))
+    SCREEN.blit(dij_btn, (WIDTH // 2 - dij_btn.get_width() // 2, 200))
+    SCREEN.blit(kru_btn, (WIDTH // 2 - kru_btn.get_width() // 2, 260))
+    pygame.display.flip()
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                _, y = pygame.mouse.get_pos()
+                if 200 <= y <= 230:
+                    return 'dijkstra'
+                elif 260 <= y <= 290:
+                    return 'kruskal'
+
 def main():
     global last_move_time, last_ghost_time, score
     running = True
@@ -208,6 +276,7 @@ def main():
             exit()
 
 # Setup game
+AI_ALGO = ai_menu()
 ghost_count = difficulty_menu()
 ghost_positions.extend(ghost_start_template[:ghost_count])
 main()
