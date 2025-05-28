@@ -224,56 +224,73 @@ def ai_menu():
 def main():
     global last_move_time, last_ghost_time, score
     running = True
+
     while running:
         now = pygame.time.get_ticks()
-        SCREEN.fill(BLACK)
-        draw_grid()
-        draw_entities()
-        draw_score()
-        pygame.display.flip()
-        clock.tick(30)
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
+        handle_events()               # → process quitting & input
+        update_pacman(now)            # → move Pac‑Man & eat dots
+        update_ghosts(now)            # → move ghosts on a timer
+        render_frame()                # → draw grid, entities, score
+        check_end_conditions()        # → game‑over / victory screens
 
-        if now - last_move_time > move_delay:
-            handle_pacman_move()
-            last_move_time = now
-
-        r, c = pacman_pos
-        if maze[r][c] == 0:
-            maze[r][c] = 2
-            score += 1
-
-        if now - last_ghost_time > ghost_delay:
-            move_ghosts()
-            last_ghost_time = now
-
-        if check_collision():
-            elapsed = (pygame.time.get_ticks() - start_time) // 1000
-            SCREEN.fill(BLACK)
-            lose_text = font.render("Game Over!", True, (255, 50, 50))
-            time_text = font.render(f" Time: {elapsed} seconds", True, WHITE)
-            SCREEN.blit(lose_text, (WIDTH // 2 - lose_text.get_width() // 2, HEIGHT // 2 - 20))
-            SCREEN.blit(time_text, (WIDTH // 2 - time_text.get_width() // 2, HEIGHT // 2 + 20))
-            pygame.display.flip()
-            pygame.time.delay(5000)
-            pygame.quit()
-            exit()
+        clock.tick(30)                # cap FPS
 
 
-        if check_victory():
-            elapsed = (pygame.time.get_ticks() - start_time) // 1000
-            SCREEN.fill(BLACK)
-            win_text = font.render("Congratulations! You win!", True, (255, 255, 0))
-            time_text = font.render(f" Time: {elapsed} seconds", True, WHITE)
-            SCREEN.blit(win_text, (WIDTH // 2 - win_text.get_width() // 2, HEIGHT // 2 - 20))
-            SCREEN.blit(time_text, (WIDTH // 2 - time_text.get_width() // 2, HEIGHT // 2 + 20))
-            pygame.display.flip()
-            pygame.time.delay(5000)
-            pygame.quit()
-            exit()
+def handle_events():
+    global running
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+
+def update_pacman(now):
+    global last_move_time, score
+    # only move when our delay has passed
+    if now - last_move_time > move_delay:
+        handle_pacman_move()
+        last_move_time = now
+
+    # eat dot if we’re on one
+    r, c = pacman_pos
+    if maze[r][c] == 0:
+        maze[r][c] = 2
+        score += 1
+
+
+def update_ghosts(now):
+    global last_ghost_time
+    if now - last_ghost_time > ghost_delay:
+        move_ghosts()
+        last_ghost_time = now
+
+
+def render_frame():
+    SCREEN.fill(BLACK)
+    draw_grid()
+    draw_entities()
+    draw_score()
+    pygame.display.flip()
+
+
+def check_end_conditions():
+    if check_collision():
+        show_end_screen("Game Over!", (255, 50, 50))
+    elif check_victory():
+        show_end_screen("Congratulations! You win!", (255, 255, 0))
+
+
+def show_end_screen(message, color):
+    elapsed = (pygame.time.get_ticks() - start_time) // 1000
+    SCREEN.fill(BLACK)
+    text1 = font.render(message, True, color)
+    text2 = font.render(f"Time: {elapsed} seconds", True, WHITE)
+    SCREEN.blit(text1, ((WIDTH - text1.get_width())//2, HEIGHT//2 - 20))
+    SCREEN.blit(text2, ((WIDTH - text2.get_width())//2, HEIGHT//2 + 20))
+    pygame.display.flip()
+    pygame.time.delay(5000)
+    pygame.quit()
+    exit()
 
 # Setup game
 AI_ALGO = ai_menu()
